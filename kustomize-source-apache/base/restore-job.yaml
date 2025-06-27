@@ -93,11 +93,25 @@ spec:
           # Restore Moodle data
           echo "Restoring Moodle data..."
           
-          # Copy the backup to the pod
+          # Scale down Moodle deployment to prevent file locks
+          echo "Scaling down Moodle deployment..."
+          kubectl scale deployment moodle-apache -n $NAMESPACE --replicas=0
+          kubectl wait --for=delete pod -l app=moodle-apache -n $NAMESPACE --timeout=120s
+          
+          # Scale back up to get a fresh pod
+          echo "Scaling up Moodle deployment..."
+          kubectl scale deployment moodle-apache -n $NAMESPACE --replicas=1
+          kubectl wait --for=condition=Ready pod -l app=moodle-apache -n $NAMESPACE --timeout=120s
+          
+          # Get the new pod name
+          MOODLE_POD=$(kubectl get pods -n $NAMESPACE -l app=moodle-apache -o jsonpath='{.items[0].metadata.name}')
+          echo "New Moodle pod: $MOODLE_POD"
+          
+          # Copy the backup to the fresh pod
           kubectl cp $BACKUP_DIR/moodledata.tar.gz $NAMESPACE/$MOODLE_POD:/tmp/moodledata.tar.gz -c moodle-apache
           
-          # Extract the backup
-          kubectl exec -n $NAMESPACE $MOODLE_POD -c moodle-apache -- bash -c "rm -rf /var/moodledata_secure/* && tar -xzf /tmp/moodledata.tar.gz -C /var/moodledata_secure --strip-components=1 && rm /tmp/moodledata.tar.gz"
+          # Extract the backup (fresh pod should have clean moodledata)
+          kubectl exec -n $NAMESPACE $MOODLE_POD -c moodle-apache -- bash -c "rm -rf /var/moodledata_secure/* && tar -xzf /tmp/moodledata.tar.gz -C /var/moodledata_secure --strip-components=2 && rm /tmp/moodledata.tar.gz"
           
           # Verify Moodle data restore
           echo "Verifying Moodle data restore..."
