@@ -26,7 +26,7 @@ jobs:
         run: |
           docker run --rm moodle php -v
           docker run --rm moodle php -m | tr '\n' ' '; echo
-          docker run --rm moodle grep -E "^\\$release" /var/www/html/version.php
+          docker run --rm moodle grep -F "release " /var/www/html/version.php
       - name: Install and serve
         run: |
           docker run -d --name moodle --network ${{ job.services.db.network }} -p 8080:8080 moodle
