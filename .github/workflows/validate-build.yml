@@ -29,7 +29,9 @@ jobs:
           docker run --rm moodle grep -F "release " /var/www/html/version.php
       - name: Install and serve
         run: |
+          docker exec ${{ job.services.db.id }} mariadb -uroot -proot -e "DROP DATABASE moodle; CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
           docker run -d --name moodle --network ${{ job.services.db.network }} -p 8080:8080 moodle
+          docker exec -u root moodle sh -c 'echo max_input_vars=5000 > /usr/local/etc/php/conf.d/zz-configmap.ini && apache2ctl graceful'
           docker exec moodle php admin/cli/install.php --non-interactive --agree-license \
             --wwwroot=http://localhost:8080 --dataroot=/var/moodledata_secure \
             --dbtype=mariadb --dbhost=db --dbname=moodle --dbuser=root --dbpass=root \
