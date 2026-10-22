@@ -1,0 +1,40 @@
+name: validate-build
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        base: [php:8.1-apache, php:8.3-apache]
+    services:
+      db:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: moodle
+        options: --health-cmd="healthcheck.sh --connect" --health-interval=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: kustomize-source-apache/base
+        run: |
+          sed -i "1s|.*|FROM ${{ matrix.base }}|" Dockerfile
+          head -1 Dockerfile
+          docker build -t moodle .
+      - name: Inspect
+        run: |
+          docker run --rm moodle php -v
+          docker run --rm moodle php -m | tr '\n' ' '; echo
+          docker run --rm moodle grep -E "^\\$release" /var/www/html/version.php
+      - name: Install and serve
+        run: |
+          docker run -d --name moodle --network ${{ job.services.db.network }} -p 8080:8080 moodle
+          docker exec moodle php admin/cli/install.php --non-interactive --agree-license \
+            --wwwroot=http://localhost:8080 --dataroot=/var/moodledata_secure \
+            --dbtype=mariadb --dbhost=db --dbname=moodle --dbuser=root --dbpass=root \
+            --fullname=Test --shortname=test --adminpass='Test-pass-123!' --adminemail=admin@example.com 2>&1 | tail -15
+          docker exec moodle php admin/cli/cron.php 2>&1 | tail -3
+          curl -sS -o /dev/null -w 'GET /login/index.php -> %{http_code}\n' http://localhost:8080/login/index.php
+          curl -sS http://localhost:8080/login/index.php | grep -o '<title>[^<]*</title>'
+          docker logs moodle 2>&1 | grep -iE 'fatal|deprecated|warning' | head -10 || true
