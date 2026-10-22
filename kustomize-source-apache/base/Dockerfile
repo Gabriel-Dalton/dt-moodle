@@ -1,4 +1,4 @@
-FROM php:8.1-apache
+FROM php:8.3-apache
 
 # Install required PHP extensions and dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
